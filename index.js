@@ -2,42 +2,46 @@ const axios = require('axios');
 const listEndpoints = require('express-list-endpoints');
 
 class AutoDocer {
-    constructor(config = {}) {
+    constructor() {
+        // Default Configuration
         this.config = {
-            projectName: config.title || 'Untitled API',
-            aggregatorUrl: config.aggregatorUrl || 'http://localhost:8080/api/docs', // Default to your Go Backend
-            debug: config.debug || false
+            projectName: 'Untitled API',
+            // Users can override this to point to your hosted APISpace later
+            aggregatorUrl: 'http://localhost:8080/api/docs', 
+            debug: false
         };
     }
 
     /**
-     * Middleware to initialize scanning
-     * @param {Object} app - Express App instance
-     * @param {Object} options - Runtime options
+     * Initialize the AutoDocer Middleware
+     * @param {Object} app - The Express App instance
+     * @param {Object} options - Configuration options { projectName, aggregatorUrl, debug }
      */
     init(app, options = {}) {
         this.config = { ...this.config, ...options };
 
-        if (this.config.debug) console.log(`🚀 [AutoDocer] Initialized for: ${this.config.projectName}`);
+        if (this.config.debug) {
+            console.log(`🚀 [AutoDocer] Initialized for: ${this.config.projectName}`);
+        }
 
-        // Wait for routes to be registered, then scan
+        // Wait a moment for all routes to be registered, then scan
         setTimeout(() => {
-            this.scanRoutes(app);
+            this._scanAndSend(app);
         }, 2000);
 
-        // Return a pass-through middleware
+        // Return a pass-through middleware (standard practice)
         return (req, res, next) => next();
     }
 
-    async scanRoutes(app) {
+    async _scanAndSend(app) {
         try {
             if (this.config.debug) console.log('🕵️‍♂️ [AutoDocer] Scanning routes...');
 
-            // 1. Get Endpoints
+            // 1. Get Endpoints securely using the helper library
             const endpoints = listEndpoints(app);
             const paths = {};
 
-            // 2. Format as OpenAPI Paths
+            // 2. Format endpoints into OpenAPI structure
             endpoints.forEach(endpoint => {
                 endpoint.methods.forEach(method => {
                     const path = endpoint.path;
@@ -45,7 +49,6 @@ class AutoDocer {
                     
                     if (!paths[path]) paths[path] = {};
                     
-                    // Generate basic doc structure
                     paths[path][verb] = {
                         summary: `Auto-detected ${verb.toUpperCase()} ${path}`,
                         tags: [this.config.projectName],
@@ -56,10 +59,10 @@ class AutoDocer {
                 });
             });
 
-            // 3. Build Payload
+            // 3. Build the Payload for your Backend
             const payload = {
                 serviceName: this.config.projectName,
-                url: "http://localhost:3000", // In production, this should be dynamic or env var
+                url: "http://localhost:3000", // In a future update, detect this dynamically
                 spec: {
                     openapi: "3.0.0",
                     info: { 
@@ -75,19 +78,16 @@ class AutoDocer {
             
             await axios.post(this.config.aggregatorUrl, payload);
             
-            console.log(`✅ [AutoDocer] Documentation synced successfully!`);
+            console.log(`✅ [AutoDocer] Docs synced for "${this.config.projectName}"`);
 
         } catch (error) {
             if (this.config.debug) {
                 console.error('❌ [AutoDocer] Sync Failed:', error.message);
-                if (error.response) console.error('Response:', error.response.data);
+                if (error.code === 'ECONNREFUSED') {
+                    console.error('   -> Check if your APISpace backend is running.');
+                }
             }
         }
-    }
-
-    // Helper for manual route documentation (Optional usage)
-    doc(method, path, schema, handler) {
-        return handler; 
     }
 }
 
