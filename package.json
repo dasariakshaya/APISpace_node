@@ -17,7 +17,6 @@
     "express-list-endpoints": "^6.0.0"
   },
   "devDependencies": {
-    "express": "^4.18.2",
-    "joi": "^17.11.0"
+    "express": "^4.18.2"
   }
 }
